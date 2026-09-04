@@ -1,108 +1,119 @@
+# ReviewSentinel — Product Abuse & Trust Investigation System
 
-# 🛡️ReviewSentinel | AI-Powered Moderation & Sentiment Intelligence System
+An end-to-end Trust & Safety analytics project that turns synthetic user-review activity into an explainable **detection → triage → investigation** workflow.
 
-A data engineering project simulating how platforms like Google Play or YouTube could monitor user reviews for:
+The project is intentionally built around investigation quality rather than automatic enforcement. It generates synthetic account behaviour with known ground truth, detects account- and cross-account abuse signals, prioritises cases with transparent reason codes, and evaluates the resulting queue with precision/recall metrics.
 
-- 🚨 Policy violations (hate speech, spam, personal info leaks)
-- 📉 Sentiment anomalies (sudden drops/spikes in user feedback)
-- ⚠️ Potential abuse/fraud (patterned behavior by users)
+## What it detects
 
-This project is **end-to-end**: ingestion → transformation → modeling → dashboard.
+The synthetic dataset includes ordinary users plus three controlled abuse scenarios:
 
----
+- **Spam bursts** — high-velocity repeated promotional content and link-heavy activity.
+- **Coordinated campaigns** — multiple accounts reusing the same content and shared synthetic device/network infrastructure.
+- **Policy evasion** — obfuscated policy-triggering terms designed to bypass naive keyword rules.
 
-## 📁 Folder Structure
+Signals include review velocity, duplicate-content ratio, cross-account text reuse, shared-device/network counts, policy-signal rate, URL rate, account age, and product diversity.
 
+## Investigation workflow
+
+Each account becomes a case with:
+
+- a 0–100 risk score;
+- low / medium / high risk tier;
+- human-readable reason codes;
+- review history and supporting evidence;
+- an investigation queue ranked by risk;
+- session-level analyst actions: **Dismiss / Escalate / Confirm abuse**.
+
+The score is deterministic and explainable. It is used to prioritise human review, not to automatically penalise users.
+
+## Evaluation
+
+Because the data is synthetic, every account has a known ground-truth label. The pipeline reports:
+
+- Precision
+- Recall
+- F1
+- False-positive rate
+- Precision@K for the highest-priority investigation queue
+- Confusion-matrix counts
+
+This makes the trade-off between catching abuse and incorrectly flagging legitimate users explicit and testable.
+
+## Architecture
+
+```text
+Synthetic review activity
+        |
+        v
+Text cleaning + policy-signal detection
+        |
+        v
+Behavioural feature engineering
+  - velocity / bursts
+  - repeated content
+  - cross-account reuse
+  - shared device/network
+  - URL + policy rates
+        |
+        v
+Explainable account risk scoring
+        |
+        +----> Evaluation against synthetic ground truth
+        |
+        v
+Prioritised investigation queue
+        |
+        v
+Streamlit case drill-down + analyst triage
 ```
-trust_safety_review_pipeline/
-├── data/
-│   ├── user_reviews.csv # Raw synthetic reviews
-│   └── processed_reviews.csv # Cleaned + enriched dataset
-├── pipeline/
-│   ├── data_ingestion.py # Generates synthetic reviews
-│   ├── text_cleaning.py # Preprocesses review text
-│   ├── violation_detector.py # Flags policy-violating reviews
-│   ├── sentiment_analyzer.py # Adds sentiment score using TextBlob
-│   ├── anomaly_detector.py # Detects time-series sentiment anomalies (Prophet)
-│   └── dashboard.py # Interactive Streamlit UI
-├── run_pipeline.py # End-to-end script to generate processed reviews
-└── requirements.txt # Python dependencies
+
+## Repository structure
+
+```text
+pipeline/
+  data_ingestion.py      # deterministic synthetic users + abuse scenarios
+  text_cleaning.py       # text normalisation
+  violation_detector.py  # policy/evasion signal detection
+  sentiment_analyzer.py  # legacy sentiment enrichment
+  abuse_features.py      # account and cross-account behavioural features
+  investigation.py       # risk scoring + case queue
+  evaluation.py          # precision/recall/F1/Precision@K
+  dashboard.py           # investigation UI
+app.py                   # end-to-end pipeline runner
+tests/                   # deterministic abuse-detection tests
+.github/workflows/ci.yml # automated test workflow
 ```
 
----
-
-## ⚙️ Setup Instructions
-
-### 1. Clone & Activate
+## Run locally
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/trust_safety_review_pipeline.git
-cd trust_safety_review_pipeline
-```
-
-### 2. Install Requirements
-
-```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-If you are using GitHub Codespaces, this should install automatically.
-
----
-
-## 🚀 Usage
-
-### 1. Generate and Process Reviews
-
-```bash
-python run_pipeline.py
-```
-
-This will:
-
-- Generate fake reviews
-- Clean and tokenize them
-- Flag policy violations
-- Score sentiment
-- Save the final result to `data/processed_reviews.csv`
-
-### 2. Run the Dashboard
-
-```bash
+python app.py
 streamlit run pipeline/dashboard.py
 ```
 
-You’ll see:
+The first run upgrades the older demo dataset automatically if the required investigation fields are missing.
 
-- 📈 Sentiment trends with Prophet forecast + red anomaly points
-- 🚨 Table of policy-violating reviews
+## Run tests
 
----
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
 
-## 🔍 Example Output
+The tests verify that all synthetic abuse scenarios are present, the queue contains one case per account, risk scores remain bounded, and the detector clears minimum precision/recall thresholds on deterministic ground truth.
 
-| timestamp   | review                                | sentiment_score | violation_flag |
-|--------------|--------------------------------------|-----------------|----------------|
-| 2023-08-01  | this app is a scam and garbage        | -0.8           | ✅            |
-| 2023-08-02  | really love it, but they stole my data | 0.2            | ✅            |
+## Important limitations
 
----
+- All user/account/device/network data is synthetic; this is a portfolio system, not a production abuse classifier.
+- Shared device or network infrastructure is a risk signal, not proof of abuse.
+- Static thresholds are intentionally transparent for demonstration; a production system would calibrate them by segment, investigation capacity, and false-positive cost.
+- The synthetic ground truth is useful for regression testing but is easier than real adversarial platform abuse.
+- Analyst dispositions in the public Streamlit app are session-only and are not written to a case-management database.
 
-## 📦 Tech Stack
-- **Python**: Core language
-- **Pandas, NumPy**: Data wrangling
-- **TextBlob**: Sentiment analysis
-- **Facebook Prophet**: Time-series forecasting
-- **Streamlit**: UI for results
-- **Faker**: Synthetic data generation
-- **Seaborn/Matplotlib**: Visualizations
+## Tech stack
 
----
-
-## 💡 Real-World Relevance
-This project simulates real challenges in Trust & Safety teams at companies like Google, YouTube, or Play Store, focusing on:
-
-- Review moderation
-- Fraud/spam detection
-- Policy enforcement
-- Platform health analytics
+Python, Pandas, Streamlit, TextBlob, Faker, pytest, GitHub Actions.
